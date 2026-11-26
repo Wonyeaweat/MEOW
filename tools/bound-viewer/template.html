@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">
+<title>MEOW · 电路结构与误差</title>
+<style>
+:root{--ink:#19253a;--muted:#5b6a80;--line:#dce3ec;--paper:#fff;--bg:#f4f6fa;--blue:#285bd8;--teal:#087c68;--orange:#aa650e;--violet:#7955ad;--red:#b73049;--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+*{box-sizing:border-box}body{margin:0;color:var(--ink);background:var(--bg);font:16px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:disabled{opacity:.4;cursor:default}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #91adf5;outline-offset:2px}a{color:var(--blue)}[hidden]{display:none!important}.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}.muted{color:var(--muted)}
+header{height:62px;background:#182438;color:#f3f6fb;display:flex;align-items:center;justify-content:space-between;padding:0 23px;gap:18px}.brand{font-weight:750;letter-spacing:.15em;font-size:1.1rem}.brand b{color:#8eafff}.heading{display:flex;align-items:center;gap:24px;min-width:0}.heading h1{font-size:1rem;font-weight:500;margin:0}.heading h1 span{color:#a9b7cc;margin-left:14px;font: .875rem var(--mono)}.top-right{display:flex;align-items:center;gap:18px;font-size:.875rem}.top-right a{color:#e1e9f8;text-decoration:none}.top-right a:hover{text-decoration:underline}.summary{color:#bdc9dc;font-size:.8125rem}
+.toolbar{background:var(--paper);border-bottom:1px solid var(--line);padding:12px 18px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}.control{display:flex;align-items:center;gap:8px;min-width:0}.control label{font-size:.8125rem;color:var(--muted);white-space:nowrap}input,select{background:var(--paper);border:1px solid var(--line);border-radius:6px;height:35px;padding:6px 9px;min-width:0;font-size:.875rem;color:var(--ink)}input{width:165px}select{appearance:none;padding-right:29px;background-image:linear-gradient(45deg,transparent 50%,#64748b 50%),linear-gradient(135deg,#64748b 50%,transparent 50%);background-position:calc(100% - 15px) 14px,calc(100% - 10px) 14px;background-size:5px 5px;background-repeat:no-repeat}.button{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:6px 11px;color:var(--ink);font-size:.875rem;white-space:nowrap}.button:hover:not(:disabled){background:#edf2fa}.button.primary{background:var(--blue);color:white;border-color:var(--blue)}.seg{display:flex;background:#eff2f7;border-radius:6px;padding:3px}.seg button{border:0;color:var(--muted);background:none;border-radius:4px;padding:4px 12px;font-size:.875rem}.seg button[aria-pressed=true]{background:var(--paper);color:var(--blue);box-shadow:0 1px 3px #1020351c}.control.checkbox{margin-left:auto;font-size:.8125rem}.checkbox input{width:16px;height:16px;margin:0}.checkbox label{color:var(--ink)}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 350px;height:calc(100dvh - 146px);min-height:570px}.stage{min-width:0;position:relative;overflow:hidden;background-color:#f7f9fc;background-image:radial-gradient(#d4ddea .7px,transparent .7px);background-size:18px 18px}.canvas{width:100%;height:100%;display:block;touch-action:none;cursor:grab;user-select:none}.canvas.panning{cursor:grabbing}.stage-title{position:absolute;left:18px;top:14px;z-index:2;pointer-events:none;background:#f7f9fce8;padding:6px 10px;border-radius:6px;max-width:calc(100% - 35px)}.stage-title strong{font-size:.875rem;font-weight:600}.stage-title p{margin:3px 0 0;color:var(--muted);font-size:.75rem}.stage-title #scope-description{color:var(--blue)}.stage-controls{position:absolute;bottom:20px;left:20px;display:flex;align-items:center;gap:6px;background:#ffffffed;padding:6px;border:1px solid var(--line);border-radius:8px;box-shadow:0 3px 15px #1428400b;max-width:calc(100% - 40px);flex-wrap:wrap}.zoom-value{width:46px;text-align:center;font: .8125rem var(--mono)}.stage-controls button{border:0;background:transparent}.stage-controls button:hover{background:#edf2fa}.stage-legend{position:absolute;bottom:79px;left:23px;display:flex;gap:12px;flex-wrap:wrap;font-size:.75rem;color:var(--muted);background:#f7f9fce8;padding:4px 6px;border-radius:4px;max-width:calc(100% - 50px)}.stage-legend span{display:flex;align-items:center;gap:5px}.line-sample{width:18px;border-top:2px solid #97a8bc}.line-sample.in{border-color:var(--orange)}.line-sample.out{border-color:var(--teal)}.bubble-sample{border:1.5px solid #65768c;border-radius:50%;width:9px;height:9px;background:white}.mini-wrap{position:absolute;right:17px;bottom:20px;background:#ffffffed;border:1px solid var(--line);border-radius:8px;width:154px;padding:8px}.mini-wrap span{font-size:.6875rem;color:var(--muted);display:block;margin-bottom:3px}.mini{display:block;width:136px;height:118px;cursor:crosshair;touch-action:none}.tooltip{position:absolute;z-index:5;pointer-events:none;background:#172438;color:#fff;padding:11px 13px;border-radius:7px;font-size:.8125rem;box-shadow:0 5px 20px #0b1c3433;max-width:270px}.tooltip strong{display:block;margin-bottom:4px}.tooltip .tip-line{color:#d9e5fa;margin:3px 0}.toast{position:absolute;top:85px;left:20px;padding:9px 13px;border:1px solid #e3c68d;background:#fff6e4;color:#815813;border-radius:6px;font-size:.875rem;max-width:calc(100% - 40px)}
+.wire{fill:none;stroke:#9aaac0;stroke-width:1.2;vector-effect:non-scaling-stroke;pointer-events:stroke;cursor:pointer}.wire.incoming{stroke:var(--orange);stroke-width:2.1}.wire.outgoing{stroke:var(--teal);stroke-width:2.1}.wire:hover{stroke:var(--blue);stroke-width:3}.edge-bubble{fill:white;stroke:#728398;stroke-width:1.5;pointer-events:none}.edge-bubble.incoming{stroke:var(--orange)}.edge-bubble.outgoing{stroke:var(--teal)}.node{cursor:pointer;outline:none}.node .box{fill:white;stroke:#a7b7cb;stroke-width:1.2;filter:drop-shadow(0 1px 1px #2034510c)}.node.kind-input .box{fill:#eaf1ff;stroke:#7fa1dd}.node.kind-output .box{fill:#f1eafb;stroke:#b499d1}.node.kind-constant .box{fill:#edf0f4}.node.selected .box{stroke:var(--blue);stroke-width:3;fill:#f6f8ff}.node:focus-visible .box{stroke:var(--blue);stroke-width:3.5}.node:hover .box{stroke:var(--blue);stroke-width:2.5}.node .title{font:600 15px var(--mono);fill:var(--ink)}.node .kind{font:11px system-ui,sans-serif;fill:#6a7a8e}.node .value{font:12px var(--mono)}.node .pred{fill:var(--blue)}.node .actual{fill:var(--teal)}.node .port-label{font:10px system-ui,sans-serif;fill:#708098}.node .status-stripe{fill:#d29938}.node.exact .status-stripe{fill:#349883}.node.unsafe .status-stripe{fill:var(--red)}.node .divider{stroke:#e4eaf1;stroke-width:1}.node .pi-label{font:600 15px var(--mono);fill:#25446e}.node.kind-output .pi-label{fill:#67418e}.no-values .value,.no-values .divider{display:none}
+.inspector{background:var(--paper);border-left:1px solid var(--line);padding:22px 20px;overflow-y:auto;min-width:0}.inspector-top{display:flex;align-items:center;justify-content:space-between;gap:10px}.inspector-top h2{margin:0;font:650 1.45rem var(--mono)}.badge{border-radius:4px;padding:3px 7px;font-size:.75rem;color:var(--muted);background:#eff2f7}.badge.tight{background:#e6f5ef;color:var(--teal)}.badge.loose{background:#fff2d9;color:#8d5c16}.badge.unsafe{background:#fdebf0;color:var(--red)}.node-meta{color:var(--muted);font-size:.8125rem;margin:6px 0 15px}.equation{background:#f4f6fa;border-radius:6px;padding:10px 11px;font: .875rem/1.7 var(--mono);overflow-wrap:anywhere}.section{border-top:1px solid var(--line);margin-top:19px;padding-top:17px}.section h3{font-size:.9375rem;margin:0 0 10px;font-weight:650}.section .sub{font-size:.8125rem;color:var(--muted);margin:5px 0 12px}.bound-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.bound-card{border:1px solid var(--line);border-radius:7px;padding:10px 9px;min-width:0;cursor:pointer;background:white;text-align:left}.bound-card[aria-pressed=true]{border-color:#87a7ed;background:#f1f5ff}.bound-card .force-label{font-size:.8125rem;display:flex;justify-content:space-between;align-items:center;color:var(--ink);gap:5px;margin-bottom:8px}.bound-card .force-label small{font-size:.6875rem;color:var(--muted)}.bound-card p{font: .8125rem/1.8 var(--mono);margin:0;white-space:nowrap}.bound-card .pred{color:var(--blue)}.bound-card .exact{color:var(--teal)}.range-chart{width:100%;height:100px;display:block;margin-top:12px}.range-chart text{font:11px system-ui,sans-serif;fill:var(--muted)}.numbers{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin:10px 0}.numbers dt{font-size:.75rem;color:var(--muted)}.numbers dd{font:500 1rem var(--mono);margin:3px 0}.hint{font-size:.8125rem;color:var(--muted);line-height:1.7}.connection-list{display:grid;gap:6px}.connection{background:#f7f9fc;border:1px solid #e4eaf2;border-radius:5px;padding:8px 10px;display:flex;align-items:center;gap:8px;text-align:left;color:var(--ink);min-width:0}.connection:hover{background:#eaf1ff;border-color:#adc2ea}.connection .pin{font-size:.75rem;color:var(--muted);min-width:15px}.connection .name{font: .875rem var(--mono);overflow-wrap:anywhere}.connection .inv{margin-left:auto;font-size:.6875rem;color:#8a5d16;background:#fff1d6;border-radius:3px;padding:2px 4px;white-space:nowrap}.connection .normal{margin-left:auto;font-size:.6875rem;color:var(--muted)}.count-pill{font:400 .75rem var(--mono);color:var(--muted);margin-left:8px}details{font-size:.8125rem;border-top:1px solid var(--line);margin-top:18px;padding-top:13px}summary{cursor:pointer;font-weight:500}.references{display:grid;gap:11px;margin-top:12px}.references strong{display:block;font: .875rem var(--mono);margin-top:3px}.references p{margin:0;color:var(--muted)}.empty-query{background:#f4f6fa;padding:12px;border-radius:6px;font-size:.875rem;color:var(--muted);line-height:1.7}.bottom{height:31px;background:var(--paper);border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;gap:15px;padding:0 18px;font-size:.6875rem;color:var(--muted)}.bottom span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:1150px){.toolbar{gap:10px;padding:10px 12px}.control{gap:6px}.control.checkbox{margin-left:0}.app{grid-template-columns:minmax(0,1fr) 320px;height:calc(100dvh - 185px)}.inspector{padding:18px 15px}.summary{display:none}.mini-wrap{width:126px}.mini{width:108px;height:100px}.stage-controls{left:12px;bottom:14px;gap:2px}.stage-controls .button{padding:6px 8px}.stage-legend{left:12px}.bound-card{padding:9px 7px}.bound-card p{font-size:.75rem}}
+@media(max-width:780px){header{height:auto;min-height:60px;padding:12px 15px}.heading{gap:12px}.heading h1{font-size:.875rem}.heading h1 span{display:none}.top-right{font-size:.8125rem}.toolbar{gap:10px;align-items:flex-start}.control{flex-wrap:wrap}.control.search{flex-basis:100%}.control.search input{flex:1;max-width:260px}.app{height:auto;min-height:0;grid-template-columns:1fr}.stage{height:64dvh;min-height:430px}.inspector{border-left:0;border-top:1px solid var(--line);overflow-y:visible}.bound-grid{max-width:450px}.bound-card p{font-size:.875rem}.range-chart{max-width:450px}.numbers{max-width:450px}.mini-wrap{right:10px;bottom:80px;width:96px}.mini{width:78px;height:75px}.mini-wrap span{font-size:.625rem}.stage-legend{bottom:78px;max-width:calc(100% - 120px);gap:7px;font-size:.6875rem}.bottom{height:auto;min-height:34px;padding:7px 12px;flex-wrap:wrap}.bottom span{white-space:normal}.node-meta{margin-bottom:12px}}
+@media(max-width:400px){.heading h1{font-size:.8125rem}.brand{font-size:.9375rem}.top-right{font-size:.75rem}.toolbar label{font-size:.75rem}.stage-controls{left:8px;max-width:calc(100% - 16px);padding:4px;gap:0}.stage-controls .button{padding:5px 7px;font-size:.75rem}.zoom-value{width:37px;font-size:.75rem}.control select{max-width:145px}.stage-title{left:8px}.stage-title p{font-size:.6875rem}}
+body{height:100dvh;display:flex;flex-direction:column;overflow:hidden}header,.toolbar,.bottom{flex-shrink:0}.app{flex:1;height:auto;min-height:0}
+@media(max-width:780px){body{height:auto;display:block;overflow:auto}.app{height:auto}.stage{height:64dvh;min-height:430px}}
+</style>
+</head>
+<body>
+<header><div class="heading"><div class="brand">ME<b>OW</b></div><h1>电路结构与误差<span id="circuit-name"></span></h1></div><div class="top-right"><span class="summary" id="circuit-summary"></span><a href="bounds.html">查看区间表</a></div></header>
+<div class="toolbar" aria-label="电路查看工具">
+<form class="control search" id="search-form"><label for="node-search">定位节点</label><input id="node-search" list="node-options" placeholder="g17、a[0]、o[7]" autocomplete="off"><datalist id="node-options"></datalist><button class="button" type="submit">定位</button></form>
+<div class="control"><label>节点上的误差</label><div class="seg" aria-label="节点显示哪种替换的误差"><button id="force-0" aria-pressed="true">强制 0</button><button id="force-1" aria-pressed="false">强制 1</button></div></div>
+<div class="control"><label for="scope">显示范围</label><select id="scope"><option value="all">全电路</option><option value="neighbors">选中节点的邻接区域</option><option value="fanin">选中节点的扇入锥</option><option value="fanout">选中节点的扇出锥</option></select><select id="depth" aria-label="邻接区域深度" hidden><option value="1">1 跳</option><option value="2" selected>2 跳</option><option value="3">3 跳</option></select></div>
+<div class="control checkbox"><input id="show-bounds" type="checkbox" checked><label for="show-bounds">节点内显示区间</label></div>
+</div>
+<div class="app">
+<main class="stage" id="stage" aria-label="电路画布">
+<div class="stage-title"><strong id="view-title"></strong><p id="scope-description"></p><p>滚轮缩放 · 拖动平移 · 悬停或点击节点查看误差</p><p id="boundary-note" hidden>局部视图可能隐藏其他连接；右侧保留全部直接连接。</p></div>
+<svg class="canvas" id="canvas" role="img" aria-label="absdiff 电路连接图，可缩放、拖动并选择节点"><defs><marker id="arrow-base" viewBox="0 0 8 8" markerWidth="6" markerHeight="6" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,1 L7,4 L0,7" fill="none" stroke="#8296b0" stroke-width="1.3"/></marker><marker id="arrow-in" viewBox="0 0 8 8" markerWidth="7" markerHeight="7" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,1 L7,4 L0,7" fill="none" stroke="#aa650e" stroke-width="1.6"/></marker><marker id="arrow-out" viewBox="0 0 8 8" markerWidth="7" markerHeight="7" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,1 L7,4 L0,7" fill="none" stroke="#087c68" stroke-width="1.6"/></marker></defs><g id="world"><g id="edge-layer"></g><g id="node-layer"></g></g></svg>
+<div class="tooltip" id="tooltip" hidden></div><div class="toast" id="toast" role="status" hidden></div>
+<div class="stage-legend"><span><i class="line-sample"></i>信号方向</span><span><i class="bubble-sample"></i>反相</span><span><i class="line-sample in"></i>选中节点扇入</span><span><i class="line-sample out"></i>扇出</span></div>
+<div class="stage-controls"><button class="button" id="zoom-out" aria-label="缩小">−</button><span class="zoom-value" id="zoom-value"></span><button class="button" id="zoom-in" aria-label="放大">＋</button><button class="button" id="fit">适应视图</button><button class="button" id="center">放大选中</button><button class="button" id="local">局部查看</button></div>
+<div class="mini-wrap"><span id="mini-label">全电路导航</span><svg class="mini" id="minimap" aria-label="电路缩略图，点击移动视口"></svg></div>
+</main>
+<aside class="inspector" aria-label="节点连接与误差详情">
+<div class="inspector-top"><h2 id="node-title"></h2><span class="badge" id="node-kind"></span></div><p class="node-meta" id="node-meta"></p><div class="equation" id="equation"></div>
+<section class="section" id="error-section"><h3>替换该节点的输出误差</h3><p class="sub">预估：Sᵥ 集合传播 · 实际：完整穷举</p><div class="bound-grid"><button class="bound-card" id="bound-0" aria-pressed="true"><span class="force-label">强制为 0<small id="bound-status-0"></small></span><p class="pred" id="bound-pred-0"></p><p class="exact" id="bound-exact-0"></p></button><button class="bound-card" id="bound-1" aria-pressed="false"><span class="force-label">强制为 1<small id="bound-status-1"></small></span><p class="pred" id="bound-pred-1"></p><p class="exact" id="bound-exact-1"></p></button></div><svg class="range-chart" id="range-chart" role="img" aria-label="预估与实际误差区间对照"></svg><dl class="numbers"><div><dt>预估 WCE</dt><dd id="pred-wce"></dd></div><div><dt>实际 WCE</dt><dd id="exact-wce"></dd></div><div><dt>下界多估</dt><dd id="lower-slack"></dd></div><div><dt>上界多估</dt><dd id="upper-slack"></dd></div></dl><p class="hint" id="error-hint"></p></section>
+<section class="section" id="no-error" hidden><p class="empty-query" id="no-error-text"></p></section>
+<section class="section"><h3>直接扇入<span class="count-pill" id="fanin-count"></span></h3><div class="connection-list" id="fanin-list"></div></section>
+<section class="section"><h3>直接扇出<span class="count-pill" id="fanout-count"></span></h3><div class="connection-list" id="fanout-list"></div></section>
+<details id="references"><summary>其他误差分析结果</summary><div class="references"><div>精确逐 bit 区间再求和<strong id="bitwise"></strong></div><div>原 MEOW 预估（k = 12）<strong id="meow-bound"></strong></div><p>以上参考值针对当前选中的强制值。逐 bit 求和仍可能丢失输出之间的相关性。</p></div></details>
+</aside>
+</div>
+<footer class="bottom"><span id="view-count"></span><span>节点区间表示替换该节点后，整个输出数值的变化 Δ = 新输出 − 原输出。</span><span id="validation-summary"></span></footer>
+<script id="bound-data" type="application/json">__BOUND_DATA__</script>
+<script>
+(()=>{
+'use strict';
+const D=JSON.parse(document.getElementById('bound-data').textContent),$=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const interval=(l,u)=>`[${l}, ${u}]`,shortInterval=(l,u)=>`[${l},${u}]`,wce=(l,u)=>Math.max(Math.abs(l),Math.abs(u));
+const graph=D.graph,nodes=new Map(graph.nodes.map(n=>[n.id,n])),edges=graph.edges;
+const incoming=new Map(graph.nodes.map(n=>[n.id,[]])),outgoing=new Map(graph.nodes.map(n=>[n.id,[]]));
+for(const e of edges){incoming.get(e.target).push(e);outgoing.get(e.source).push(e);}
+const results=new Map(D.rows.map(r=>[`${r.gate}:${r.force}`,r]));
+const row=(id,f=force)=>results.get(`${nodes.get(id).variable}:${f}`);
+const isTight=r=>r.bound_l===r.exact_l&&r.bound_u===r.exact_u;
+const isSound=r=>r.bound_l<=r.exact_l&&r.bound_u>=r.exact_u;
+const queryStatus=r=>!isSound(r)?'unsafe':isTight(r)?'exact':'loose';
+const queryLabel=r=>!isSound(r)?'越界':isTight(r)?'精确':'偏松';
+let selected=graph.nodes.find(n=>n.kind==='and').id,force=0,scope='all',depth=2,visible=new Set(nodes.keys());
+let camera={x:0,y:0,k:1},fitCamera=true,drag=null,toastTimer;
+let positions=new Map(graph.nodes.map(n=>[n.id,n]));
+const svg=$('canvas'),world=$('world');
+$('circuit-name').textContent=D.circuit;
+$('circuit-summary').textContent=`${D.metadata.inputs} PI · ${D.metadata.and_gates} AND · ${D.metadata.outputs} PO · ${edges.length} 条连接`;
+$('validation-summary').textContent=`${D.rows.length} 个查询 · 每次穷举 ${D.metadata.patterns_per_query.toLocaleString('en-US')} 个输入`;
+$('node-options').innerHTML=graph.nodes.map(n=>`<option value="${esc(n.label)}">${esc(n.kind==='and'?'AND gate':n.kind==='input'?'主输入':n.kind==='output'?'主输出':'常量')}</option>`).join('');
+function edgePath(e){const p=e.points;return `M${p[0][0]},${p[0][1]} `+Array.from({length:(p.length-1)/3},(_,i)=>'C'+p.slice(1+i*3,4+i*3).map(x=>x.join(',')).join(' ')).join(' ');}
+function createGraph(){
+ $('edge-layer').innerHTML=edges.map(e=>{
+  const target=nodes.get(e.target),py=target.y+(target.kind==='and'?(e.pin===0?-18:18):0);
+  return `<g data-edge-group="${e.id}"><path class="wire" data-edge="${e.id}" d="${edgePath(e)}" marker-end="url(#arrow-base)"/>${e.inverted?`<circle class="edge-bubble" cx="${target.x-target.width/2-5}" cy="${py}" r="4.4"/>`:''}</g>`;
+ }).join('');
+ $('node-layer').innerHTML=graph.nodes.map(n=>{
+  const and=n.kind==='and',x=-n.width/2,y=-n.height/2;
+  return `<g class="node kind-${n.kind}" id="node-${n.id}" data-node="${n.id}" transform="translate(${n.x},${n.y})" role="button" tabindex="0"><title></title><rect class="box" x="${x}" y="${y}" width="${n.width}" height="${n.height}" rx="${and?7:12}"/>${and?`<rect class="status-stripe" x="${x+1}" y="${y+9}" width="3" height="${n.height-18}" rx="1"/><text class="title" x="${x+13}" y="${y+22}">${esc(n.label)}</text><text class="kind" x="${-x-12}" y="${y+21}" text-anchor="end">AND</text><line class="divider" x1="${x+12}" x2="${-x-12}" y1="${y+31}" y2="${y+31}"/><text class="value pred" x="${x+13}" y="${y+50}"></text><text class="value actual" x="${x+13}" y="${y+70}"></text>`:`<text class="pi-label" x="0" y="-1" text-anchor="middle">${esc(n.label)}</text><text class="kind" x="0" y="14" text-anchor="middle">${n.kind==='input'?'PI · v'+n.variable:n.kind==='output'?'PO · bit '+n.index:'CONST'}</text>`}</g>`;
+ }).join('');
+}
+function walk(start,direction){const found=new Set([start]),todo=[start];for(let i=0;i<todo.length;i++){for(const e of (direction==='in'?incoming:outgoing).get(todo[i])){const id=direction==='in'?e.source:e.target;if(!found.has(id)){found.add(id);todo.push(id);}}}return found;}
+function visibleNodes(){
+ if(scope==='all')return new Set(nodes.keys());
+ if(scope==='fanin')return walk(selected,'in');
+ if(scope==='fanout')return walk(selected,'out');
+ const found=new Set([selected]);let frontier=[selected];
+ for(let i=0;i<depth;i++){const next=[];for(const id of frontier)for(const e of [...incoming.get(id),...outgoing.get(id)])for(const other of [e.source,e.target])if(!found.has(other)){found.add(other);next.push(other);}frontier=next;}
+ return found;
+}
+function compactLayout(){
+ if(scope==='all'){positions=new Map(graph.nodes.map(n=>[n.id,n]));return;}
+ const order=graph.nodes.filter(n=>visible.has(n.id)).sort((a,b)=>a.level-b.level);
+ const ranks=new Map(),layers=[];
+ for(const n of order){
+  const parents=incoming.get(n.id).filter(e=>visible.has(e.source));
+  const rank=parents.length?1+Math.max(...parents.map(e=>ranks.get(e.source))):0;
+  ranks.set(n.id,rank);(layers[rank]??=[]).push(n.id);
+ }
+ for(const layer of layers)layer.sort((a,b)=>nodes.get(a).y-nodes.get(b).y);
+ const heights=layers.map(layer=>layer.reduce((sum,id)=>sum+nodes.get(id).height+32,0)-32);
+ const maxHeight=Math.max(...heights);positions=new Map();
+ const place=()=>{let x=0;layers.forEach((layer,index)=>{
+  const width=Math.max(...layer.map(id=>nodes.get(id).width));let y=(maxHeight-heights[index])/2;
+  for(const id of layer){const n=nodes.get(id);positions.set(id,{...n,x:x+width/2,y:y+n.height/2,rank:index});y+=n.height+32;}x+=width+80;
+ });};
+ place();
+ for(let pass=0;pass<4;pass++){
+  const forward=pass%2===0,indices=Array.from({length:layers.length},(_,i)=>i);if(!forward)indices.reverse();
+  for(const rank of indices){
+   const bary=id=>{const ee=(forward?incoming:outgoing).get(id).filter(e=>visible.has(forward?e.source:e.target));return ee.length?ee.reduce((sum,e)=>sum+positions.get(forward?e.source:e.target).y,0)/ee.length:positions.get(id).y;};
+   layers[rank].sort((a,b)=>bary(a)-bary(b));place();
+  }
+ }
+}
+function currentEdgePoints(e){
+ if(scope==='all')return e.points;
+ const a=positions.get(e.source),b=positions.get(e.target),sx=a.x+a.width/2,sy=a.y;
+ const tx=b.x-b.width/2-(e.inverted?10:0),ty=b.y+(b.kind==='and'?(e.pin===0?-18:18):0),dx=Math.max(25,(tx-sx)/2);
+ return [[sx,sy],[sx+dx,sy],[tx-dx,ty],[tx,ty]];
+}
+function renderGraph(){
+ visible=visibleNodes();compactLayout();
+ const ins=scope==='fanin'?walk(selected,'in'):new Set(incoming.get(selected).map(e=>e.source));
+ const outs=scope==='fanout'?walk(selected,'out'):new Set(outgoing.get(selected).map(e=>e.target));
+ let edgeCount=0;
+ for(const e of edges){
+  const g=document.querySelector(`[data-edge-group="${e.id}"]`),show=visible.has(e.source)&&visible.has(e.target);g.style.display=show?'':'none';if(show)edgeCount++;
+  if(show){g.querySelector('path').setAttribute('d',edgePath({points:currentEdgePoints(e)}));const bubble=g.querySelector('circle');if(bubble){const p=positions.get(e.target);bubble.setAttribute('cx',p.x-p.width/2-5);bubble.setAttribute('cy',p.y+(p.kind==='and'?(e.pin===0?-18:18):0));}}
+  const inEdge=e.target===selected||(scope==='fanin'&&ins.has(e.source)&&ins.has(e.target));
+  const outEdge=e.source===selected||(scope==='fanout'&&outs.has(e.source)&&outs.has(e.target));
+  const cls=inEdge?'incoming':outEdge?'outgoing':'';
+  g.querySelector('path').setAttribute('class','wire '+cls);
+  g.querySelector('path').setAttribute('marker-end',`url(#arrow-${inEdge?'in':outEdge?'out':'base'})`);
+  const bubble=g.querySelector('circle');if(bubble)bubble.setAttribute('class','edge-bubble '+cls);
+ }
+ for(const n of graph.nodes){
+  const el=$('node-'+n.id),r=n.kind==='and'?row(n.id):null;
+  el.style.display=visible.has(n.id)?'':'none';
+  if(visible.has(n.id)){const p=positions.get(n.id);el.setAttribute('transform',`translate(${p.x},${p.y})`);}
+  el.setAttribute('class',`node kind-${n.kind} ${n.id===selected?'selected':''} ${r?queryStatus(r):''}`);
+  el.setAttribute('aria-pressed',String(n.id===selected));
+  const label=`${n.label}，${n.kind==='and'?`AND，强制 ${force}，预估 ${interval(r.bound_l,r.bound_u)}，实际 ${interval(r.exact_l,r.exact_u)}`:n.kind==='input'?'主输入':n.kind==='output'?'主输出':'常量'}`;
+  el.setAttribute('aria-label',label);el.querySelector('title').textContent=label;
+  if(r){el.querySelector('.pred').textContent='预 '+shortInterval(r.bound_l,r.bound_u);el.querySelector('.actual').textContent='实 '+shortInterval(r.exact_l,r.exact_u);const external=incoming.get(n.id).filter(e=>!visible.has(e.source)).length;el.querySelector('.kind').textContent=external?'AND · 外部入 '+external:'AND';}
+ }
+ $('view-title').textContent=`${D.circuit} · ${scope==='all'?'完整电路':nodes.get(selected).label+' 的'+({neighbors:'邻接区域',fanin:'扇入锥',fanout:'扇出锥'})[scope]}`;
+ $('scope-description').textContent=`${visible.size} 个节点 / ${edgeCount} 条连接 · 信号从左向右流动`;
+ $('view-count').textContent=`显示 ${visible.size} / ${nodes.size} 个节点 · ${edgeCount} / ${edges.length} 条连接`;
+ $('depth').hidden=scope!=='neighbors';$('boundary-note').hidden=scope==='all';
+ renderMini();
+}
+function literalLabel(e){return (e.inverted?'¬':'')+nodes.get(e.source).label;}
+function connectionButton(e,direction){
+ const id=direction==='in'?e.source:e.target,n=nodes.get(id);
+ const pin=direction==='in'?(nodes.get(selected).kind==='and'?(e.pin===0?'A':'B'):'IN'):(n.kind==='and'?(e.pin===0?'A':'B'):'IN');
+ return `<button class="connection" data-select="${id}" data-edge="${e.id}"><span class="pin">${direction==='in'?pin:'至'}</span><span class="name">${esc(n.label)}${direction==='out'?' · '+pin:''}</span><span class="${e.inverted?'inv':'normal'}">${e.inverted?'反相 ¬':'同相'}</span></button>`;
+}
+function renderInspector(){
+ const n=nodes.get(selected),ins=incoming.get(selected),outs=outgoing.get(selected),isAnd=n.kind==='and';
+ $('node-title').textContent=n.label;$('node-kind').textContent=isAnd?'AND':n.kind==='input'?'主输入 PI':n.kind==='output'?'主输出 PO':'常量';
+ $('node-meta').textContent=`${n.variable!==undefined?'变量 ID '+n.variable:'输出 bit '+n.index} · 拓扑层级 ${n.level}${n.kind==='output'?' · 权重 '+n.weight:''}`;
+ $('equation').textContent=isAnd?`${n.label} = ${ins.map(literalLabel).join(' ∧ ')}`:n.kind==='output'?`${n.label} = ${literalLabel(ins[0])}`:n.kind==='input'?`${n.label} · 第 ${n.index+1} 个 PI`:'常量 0';
+ $('error-section').hidden=!isAnd;$('no-error').hidden=isAnd;$('references').hidden=!isAnd;
+ if(!isAnd)$('no-error-text').textContent=`当前实验只对 AND 节点进行常量替换，因此${n.kind==='input'?'主输入':n.kind==='output'?'主输出':'常量'}没有对应的替换误差数据。可点击下方相连节点继续查看。`;
+ if(isAnd){
+  for(const f of [0,1]){const r=row(selected,f);$('bound-'+f).setAttribute('aria-pressed',String(f===force));$('bound-status-'+f).textContent=queryLabel(r);$('bound-pred-'+f).textContent='预 '+interval(r.bound_l,r.bound_u);$('bound-exact-'+f).textContent='实 '+interval(r.exact_l,r.exact_u);}
+  const r=row(selected);$('pred-wce').textContent=wce(r.bound_l,r.bound_u);$('exact-wce').textContent=wce(r.exact_l,r.exact_u);
+  $('lower-slack').textContent=r.exact_l-r.bound_l;$('upper-slack').textContent=r.bound_u-r.exact_u;
+  $('error-hint').textContent=`当前查看 g${n.variable} 强制为 ${force}。`+(!isSound(r)?'预估未覆盖真实区间。':isTight(r)?'预估上下界与实际极值完全一致。':'预估覆盖真实区间，但包含了不能同时实现的变化组合。');
+  $('bitwise').textContent=r.exact_bitwise_l===undefined?'未记录':interval(r.exact_bitwise_l,r.exact_bitwise_u);
+  $('meow-bound').textContent=r.meow_l===undefined?'未记录':interval(r.meow_l,r.meow_u);
+  drawRange(r);
+ }
+ $('fanin-count').textContent=ins.length;$('fanout-count').textContent=outs.length;
+ $('fanin-list').innerHTML=ins.length?ins.map(e=>connectionButton(e,'in')).join(''):'<p class="hint">没有扇入节点。</p>';
+ $('fanout-list').innerHTML=outs.length?outs.map(e=>connectionButton(e,'out')).join(''):'<p class="hint">没有扇出节点。</p>';
+}
+function drawRange(r){
+ const s=$('range-chart'),w=Math.max(240,s.getBoundingClientRect().width),left=25,right=w-25;
+ let lo=Math.min(0,r.bound_l,r.exact_l),hi=Math.max(0,r.bound_u,r.exact_u);if(lo===hi){lo--;hi++;}
+ const x=v=>left+(v-lo)/(hi-lo)*(right-left);s.setAttribute('viewBox',`0 0 ${w} 100`);
+ let m=`<title>强制 ${force}，预估 ${interval(r.bound_l,r.bound_u)}，实际 ${interval(r.exact_l,r.exact_u)}</title><line x1="${x(0)}" x2="${x(0)}" y1="8" y2="75" stroke="#dce3ec"/>`;
+ for(const [a,b,y,color,dash]of[[r.bound_l,r.bound_u,23,'#285bd8',''],[r.exact_l,r.exact_u,51,'#087c68','stroke-dasharray="5 3"']])m+=`<line x1="${x(a)}" x2="${x(b)}" y1="${y}" y2="${y}" stroke="${color}" stroke-width="4" ${dash}/><circle cx="${x(a)}" cy="${y}" r="3" fill="${color}"/><circle cx="${x(b)}" cy="${y}" r="3" fill="${color}"/>`;
+ for(const v of [...new Set([lo,0,hi])]){if(v===0&&v!==lo&&v!==hi&&Math.min(x(v)-left,right-x(v))<35)continue;m+=`<text x="${x(v)}" y="91" text-anchor="middle">${v}</text>`;}
+ s.innerHTML=m;
+}
+function dimensions(){return {w:svg.clientWidth,h:svg.clientHeight};}
+function bounds(ids){const nn=[...ids].map(id=>positions.get(id));return {x1:Math.min(...nn.map(n=>n.x-n.width/2))-25,y1:Math.min(...nn.map(n=>n.y-n.height/2))-25,x2:Math.max(...nn.map(n=>n.x+n.width/2))+25,y2:Math.max(...nn.map(n=>n.y+n.height/2))+25};}
+function applyCamera(){world.setAttribute('transform',`translate(${camera.x},${camera.y}) scale(${camera.k})`);$('zoom-value').textContent=Math.round(camera.k*100)+'%';updateMiniViewport();}
+function fit(){const b=bounds(visible),{w,h}=dimensions();camera.k=Math.max(.025,Math.min(1.25,(w-70)/(b.x2-b.x1),(h-165)/(b.y2-b.y1)));camera.x=w/2-camera.k*(b.x1+b.x2)/2;camera.y=(h-5)/2-camera.k*(b.y1+b.y2)/2;fitCamera=true;applyCamera();}
+function centerSelected(){const n=positions.get(selected),{w,h}=dimensions();camera.k=Math.min(1.2,Math.max(.75,camera.k));camera.x=w/2-n.x*camera.k;camera.y=h/2-n.y*camera.k;fitCamera=false;applyCamera();}
+function zoom(factor,cx,cy){const {w,h}=dimensions();cx=cx??w/2;cy=cy??h/2;const k=Math.max(.025,Math.min(3.5,camera.k*factor));camera.x=cx-(cx-camera.x)*k/camera.k;camera.y=cy-(cy-camera.y)*k/camera.k;camera.k=k;fitCamera=false;applyCamera();}
+function renderMini(){
+ const b=bounds(visible);$('minimap').setAttribute('viewBox',`${b.x1} ${b.y1} ${b.x2-b.x1} ${b.y2-b.y1}`);
+ $('mini-label').textContent=scope==='all'?'全电路导航':'当前视图导航';
+ $('minimap').innerHTML=[...visible].map(id=>positions.get(id)).map(n=>`<rect x="${n.x-n.width/2}" y="${n.y-n.height/2}" width="${n.width}" height="${n.height}" rx="4" fill="${n.id===selected?'#285bd8':'#879bb7'}"/>`).join('')+`<rect id="mini-viewport" fill="#285bd81a" stroke="#285bd8" stroke-width="${Math.max(3,(b.x2-b.x1)/250)}"/>`;
+ updateMiniViewport();
+}
+function updateMiniViewport(){const rect=$('mini-viewport');if(!rect)return;const {w,h}=dimensions();rect.setAttribute('x',-camera.x/camera.k);rect.setAttribute('y',-camera.y/camera.k);rect.setAttribute('width',w/camera.k);rect.setAttribute('height',h/camera.k);}
+function select(id,move=false){if(!nodes.has(id))return;selected=id;$('node-search').value=nodes.get(id).label;hideTip();renderGraph();renderInspector();if(scope!=='all')fit();else if(move)centerSelected();}
+function setForce(f){force=f;for(const x of [0,1])$('force-'+x).setAttribute('aria-pressed',String(x===force));renderGraph();renderInspector();hideTip();}
+function setScope(value){scope=value;$('scope').value=value;renderGraph();fit();hideTip();}
+function hideTip(){$('tooltip').hidden=true;}
+function showTip(event,content){const tip=$('tooltip'),stage=$('stage').getBoundingClientRect();tip.innerHTML=content;tip.hidden=false;let x=event.clientX-stage.left+15,y=event.clientY-stage.top+16;x=Math.max(8,Math.min(x,stage.width-tip.offsetWidth-10));y=Math.max(8,Math.min(y,stage.height-tip.offsetHeight-10));tip.style.left=x+'px';tip.style.top=y+'px';}
+function notify(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,3500);}
+svg.addEventListener('wheel',e=>{e.preventDefault();hideTip();const b=svg.getBoundingClientRect();zoom(Math.exp(-e.deltaY*.0015),e.clientX-b.left,e.clientY-b.top);},{passive:false});
+svg.addEventListener('pointerdown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,cx:camera.x,cy:camera.y,moved:false,target:e.target.closest('[data-node]')?.dataset.node,edge:e.target.closest('[data-edge]')?.dataset.edge};svg.setPointerCapture(e.pointerId);});
+svg.addEventListener('pointermove',e=>{
+ if(drag){if(Math.hypot(e.clientX-drag.x,e.clientY-drag.y)>4)drag.moved=true;if(drag.moved){hideTip();camera.x=drag.cx+e.clientX-drag.x;camera.y=drag.cy+e.clientY-drag.y;fitCamera=false;svg.classList.add('panning');applyCamera();}return;}
+ const id=e.target.closest('[data-node]')?.dataset.node;
+ if(id){const n=nodes.get(id),r=n.kind==='and'?row(id):null;showTip(e,`<strong>${esc(n.label)} · ${n.kind.toUpperCase()}</strong>${r?`<div class="tip-line">强制为 ${force}</div><div class="tip-line mono">预估 ${interval(r.bound_l,r.bound_u)}</div><div class="tip-line mono">实际 ${interval(r.exact_l,r.exact_u)}</div>`:`<div class="tip-line">扇入 ${incoming.get(id).length} · 扇出 ${outgoing.get(id).length}</div>`}<div class="tip-line">点击查看连接与两种替换结果</div>`);return;}
+ const eid=e.target.closest('[data-edge]')?.dataset.edge;
+ if(eid){const wire=edges.find(x=>x.id===eid);showTip(e,`<strong>${esc(nodes.get(wire.source).label)} → ${esc(nodes.get(wire.target).label)}</strong><div class="tip-line">${wire.inverted?'反相连接（¬）':'同相连接'} · 输入 ${nodes.get(wire.target).kind==='and'?(wire.pin===0?'A':'B'):'IN'}</div>`);return;}
+ hideTip();
+});
+svg.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;svg.classList.remove('panning');if(svg.hasPointerCapture(e.pointerId))svg.releasePointerCapture(e.pointerId);if(!d.moved){if(d.target)select(d.target);else if(d.edge)select(edges.find(x=>x.id===d.edge).target);}});
+svg.addEventListener('pointercancel',()=>{drag=null;svg.classList.remove('panning');hideTip();});svg.addEventListener('pointerleave',()=>{if(!drag)hideTip();});
+$('node-layer').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){const id=e.target.closest('[data-node]')?.dataset.node;if(id){e.preventDefault();select(id,true);}}});
+for(const f of [0,1])for(const prefix of ['force-','bound-'])$(prefix+f).addEventListener('click',()=>setForce(f));
+for(const id of ['fanin-list','fanout-list'])$(id).addEventListener('click',e=>{const b=e.target.closest('[data-select]');if(b)select(b.dataset.select,true);});
+$('scope').addEventListener('change',()=>setScope($('scope').value));$('depth').addEventListener('change',()=>{depth=Number($('depth').value);renderGraph();fit();});
+$('show-bounds').addEventListener('change',()=>$('node-layer').classList.toggle('no-values',!$('show-bounds').checked));
+$('search-form').addEventListener('submit',e=>{e.preventDefault();const text=$('node-search').value.trim().toLowerCase();const found=graph.nodes.find(n=>n.label.toLowerCase()===text||n.id.toLowerCase()===text||(n.kind==='and'&&String(n.variable)===text));if(found)select(found.id,true);else notify('未找到该节点。可以输入 g17、a[0] 或 o[7]。');});
+$('fit').addEventListener('click',fit);$('center').addEventListener('click',centerSelected);$('local').addEventListener('click',()=>setScope('neighbors'));$('zoom-in').addEventListener('click',()=>zoom(1.3));$('zoom-out').addEventListener('click',()=>zoom(1/1.3));
+$('minimap').addEventListener('pointerdown',e=>{const point=$('minimap').createSVGPoint();point.x=e.clientX;point.y=e.clientY;const p=point.matrixTransform($('minimap').getScreenCTM().inverse()),{w,h}=dimensions();camera.x=w/2-p.x*camera.k;camera.y=h/2-p.y*camera.k;fitCamera=false;applyCamera();});
+let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(fitCamera)fit();else applyCamera();if(nodes.get(selected).kind==='and')drawRange(row(selected));},100);});
+createGraph();renderGraph();renderInspector();fit();
+})();
+</script>
+</body>
+</html>

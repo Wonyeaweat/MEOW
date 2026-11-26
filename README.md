@@ -1,6 +1,18 @@
-# MEOW
+# MEOW2
 
-**Multi-View Asymmetric Error Analysis with Overlapping Windows for Approximate Logic Synthesis** — DATE 2027. [Paper](MEOW.pdf)
+MEOW2 is the development workspace for the next iteration of MEOW in
+[Wonyeaweat/MEOW](https://github.com/Wonyeaweat/MEOW). The published MEOW baseline
+is maintained separately in
+[Lin-HKUST-Guangzhou/MEOW](https://github.com/Lin-HKUST-Guangzhou/MEOW).
+
+This revision migrates the existing analyzer, optimized SAT verifier, regression
+tests, profiling tools, and circuit viewer. The analyzer still uses the original
+per-node overlapping-window algorithm. Window-centric MFFW analysis, simulation
+screening, and selective SAT refinement are planned work, not implemented features.
+The command names `meow`, `meow-wce`, and `run.py` remain compatible.
+
+Original paper: **Multi-View Asymmetric Error Analysis with Overlapping Windows
+for Approximate Logic Synthesis** — DATE 2027. [Paper](MEOW.pdf).
 
 MEOW analyzes gate-replacement errors and simplifies combinational AIG circuits under a worst-case error (WCE) bound.
 
@@ -69,3 +81,70 @@ For command-line help:
 python3 run.py analysis --help
 python3 run.py prune --help
 ```
+
+To profile core pruning after building:
+
+```bash
+python3 scripts/profile_pruning.py --output results/log2-profile
+```
+
+This runs `log2` at thresholds 9 and 84 and saves per-round analysis, planning,
+SAT, and commit times in `profile.csv`, plus `breakdown.json` and run metadata.
+SAT diagnostics include encoding, solver loading, solving, and conflict counts.
+They also report changed output counts and CNF sizes before/after cone compaction.
+Use `--threshold N` for one bound or `--summarize-only` to aggregate existing traces.
+Build, independent final verification, and mapping are excluded. Direct executable
+runs can enable tracing with `MEOW_PROFILE_CSV=/path/to/profile.csv`; its parent
+directory must already exist.
+
+The pruning verifier cancels structurally identical output terms at their original
+bit weights, folds Boolean constants, shares common expressions, and sends only
+the required CNF to ABC bsat. It retains upstream constraints for every surviving
+signal, including the replacement activation condition. These are exact reductions
+of the same signed-interval query; only UNSAT permits a replacement. If constant
+folding already proves the query contradictory, the solver receives a minimal
+contradictory CNF.
+
+To check the verifier against exhaustive simulation (including reconvergence,
+previous replacements, intervals excluding zero, and up to 256 output bits):
+
+```bash
+cmake --build build --target meow-sat-test -j 8
+cmake -E chdir build ctest --output-on-failure
+```
+
+## Circuit and bound viewer
+
+Open `tools/bound-viewer/index.html` in a browser for the bundled absdiff circuit
+snapshot, or serve it locally:
+
+```bash
+python3 -m http.server 8765 --bind 127.0.0.1 --directory tools/bound-viewer
+```
+
+Visit `http://localhost:8765`. For a remote VS Code session, forward port 8765.
+Click a gate to inspect its force-0/force-1 intervals and exact exhaustive results.
+The default estimate is the experimental paired-signal set analysis; the original
+MEOW estimate is shown separately. This snapshot is not a result of the planned
+MFFW analyzer. `bounds.html` provides the corresponding table view.
+
+The generator `tools/bound-viewer/build.py` accepts `--csv`, `--summary`, `--aag`,
+`--circuit`, and `--output`; run it with `--help` for details. Generating a new view
+requires Graphviz (`dot`) and matching analysis data. The bundled HTML is standalone.
+
+## Planned MEOW2 analysis
+
+1. Build a shared window library and reuse baseline truth tables when analyzing
+   multiple nodes within each window.
+2. Generate MFFWs from selected cut leaf sets; deduplicate input sets and bound
+   enumeration, simulation work, and memory usage.
+3. Use concrete random-input simulation to reject unsuitable replacement
+   directions and retain witness inputs.
+4. Spend a bounded SAT budget on selected nodes, then update dependent upstream
+   estimates while reusing local window computations.
+
+Local window evaluation and global interval composition need separate interfaces,
+including handling of window outputs that are themselves analysis targets.
+Simulation gives observed lower bounds, and a certified node interval does not
+make the existing upstream interval composition sound. Keep estimates, witnesses,
+and certified intervals distinct; retain certification before pruning mutations.

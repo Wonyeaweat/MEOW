@@ -3,10 +3,12 @@
 #include "pruning/netlist_transform.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <ctime>
 #include <limits>
 #include <stdexcept>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -20,10 +22,81 @@ namespace {
 struct CnfFormula {
     int variables = 0;
     std::vector<std::vector<int>> clauses;
+    // Owner 0 denotes a query constraint. Other clauses define a Boolean gate.
+    std::vector<int> owners;
+    std::vector<std::vector<std::size_t>> definitions{1};
 
-    int new_variable() { return ++variables; }
+    int new_variable() {
+        definitions.emplace_back();
+        return ++variables;
+    }
     void add_clause(std::initializer_list<int> literals) {
         clauses.emplace_back(literals);
+        owners.push_back(0);
+    }
+    void define(int output, std::initializer_list<int> literals) {
+        definitions.at(output).push_back(clauses.size());
+        clauses.emplace_back(literals);
+        owners.push_back(output);
+    }
+
+    // Retain the transitive fanin of ALL query constraints, including fault
+    // activation. Removed gates are total Boolean functions, so their clauses
+    // can always be satisfied by extending an assignment of the retained cone.
+    // Never replace a retained internal signal by a free cut input: doing so
+    // would lose the upstream correlations needed for an exact SAT decision.
+    void compact() {
+        // Constant folding can already make the violation predicate false.
+        // Keep a minimal contradictory CNF for the solver instead of loading
+        // the (now irrelevant) activation cone alongside that contradiction.
+        std::vector<signed char> units(variables + 1, 0);
+        for (const auto& clause : clauses) {
+            if (clause.size() != 1) continue;
+            const int variable = std::abs(clause.front());
+            const signed char value = clause.front() > 0 ? 1 : -1;
+            if (units[variable] == -value) {
+                variables = 1;
+                clauses = {{1}, {-1}};
+                owners.clear();
+                definitions.clear();
+                return;
+            }
+            units[variable] = value;
+        }
+        std::vector<unsigned char> live(variables + 1, 0);
+        std::vector<int> pending;
+        auto mark = [&](int literal) {
+            const int variable = std::abs(literal);
+            if (!live[variable]) {
+                live[variable] = 1;
+                pending.push_back(variable);
+            }
+        };
+        for (std::size_t i = 0; i < clauses.size(); ++i)
+            if (owners[i] == 0)
+                for (int literal : clauses[i]) mark(literal);
+        while (!pending.empty()) {
+            const int variable = pending.back();
+            pending.pop_back();
+            for (std::size_t index : definitions[variable])
+                for (int literal : clauses[index]) mark(literal);
+        }
+        std::vector<int> remap(variables + 1, 0);
+        int count = 0;
+        for (int variable = 1; variable <= variables; ++variable)
+            if (live[variable]) remap[variable] = ++count;
+        std::size_t kept = 0;
+        for (std::size_t i = 0; i < clauses.size(); ++i) {
+            if (owners[i] != 0 && !live[owners[i]]) continue;
+            if (kept != i) clauses[kept] = std::move(clauses[i]);
+            for (int& literal : clauses[kept])
+                literal = literal < 0 ? -remap[-literal] : remap[literal];
+            ++kept;
+        }
+        clauses.resize(kept);
+        variables = count;
+        owners.clear();
+        definitions.clear();
     }
 };
 
@@ -32,47 +105,75 @@ class BooleanCnfBuilder {
     explicit BooleanCnfBuilder(CnfFormula& formula)
         : formula_(formula) {
         false_literal_ = formula_.new_variable();
-        formula_.add_clause({-false_literal_});
+        formula_.define(false_literal_, {-false_literal_});
     }
 
     int false_literal() const { return false_literal_; }
     int true_literal() const { return -false_literal_; }
 
     int make_and(int lhs, int rhs) {
+        if (lhs == false_literal() || rhs == false_literal() || lhs == -rhs)
+            return false_literal();
+        if (lhs == true_literal() || lhs == rhs) return rhs;
+        if (rhs == true_literal()) return lhs;
+        const auto key = gate_key(lhs, rhs);
+        const auto found = ands_.find(key);
+        if (found != ands_.end()) return found->second;
         const int out = formula_.new_variable();
-        formula_.add_clause({-lhs, -rhs, out});
-        formula_.add_clause({lhs, -out});
-        formula_.add_clause({rhs, -out});
+        formula_.define(out, {-lhs, -rhs, out});
+        formula_.define(out, {lhs, -out});
+        formula_.define(out, {rhs, -out});
+        ands_.emplace(key, out);
         return out;
     }
 
     int make_or(int lhs, int rhs) {
-        const int out = formula_.new_variable();
-        formula_.add_clause({lhs, rhs, -out});
-        formula_.add_clause({-lhs, out});
-        formula_.add_clause({-rhs, out});
-        return out;
+        return -make_and(-lhs, -rhs);
     }
 
     int make_xor(int lhs, int rhs) {
+        if (lhs == rhs) return false_literal();
+        if (lhs == -rhs) return true_literal();
+        if (lhs == false_literal()) return rhs;
+        if (rhs == false_literal()) return lhs;
+        if (lhs == true_literal()) return -rhs;
+        if (rhs == true_literal()) return -lhs;
+        const bool inverted = (lhs < 0) != (rhs < 0);
+        lhs = std::abs(lhs);
+        rhs = std::abs(rhs);
+        const auto key = gate_key(lhs, rhs);
+        const auto found = xors_.find(key);
+        if (found != xors_.end()) return inverted ? -found->second : found->second;
         const int out = formula_.new_variable();
-        formula_.add_clause({-lhs, -rhs, -out});
-        formula_.add_clause({lhs, rhs, -out});
-        formula_.add_clause({lhs, -rhs, out});
-        formula_.add_clause({-lhs, rhs, out});
-        return out;
+        formula_.define(out, {-lhs, -rhs, -out});
+        formula_.define(out, {lhs, rhs, -out});
+        formula_.define(out, {lhs, -rhs, out});
+        formula_.define(out, {-lhs, rhs, out});
+        xors_.emplace(key, out);
+        return inverted ? -out : out;
     }
 
     std::pair<int, int> make_full_adder(int lhs, int rhs, int carry_in) {
+        if (lhs == rhs) return {carry_in, lhs};
+        if (lhs == -rhs) return {-carry_in, carry_in};
+        if (lhs == carry_in) return {rhs, lhs};
+        if (lhs == -carry_in) return {-rhs, rhs};
+        if (rhs == carry_in) return {lhs, rhs};
+        if (rhs == -carry_in) return {-lhs, lhs};
+        // Move any constant into carry_in, then use a half adder.
+        if (lhs == false_literal() || lhs == true_literal()) std::swap(lhs, carry_in);
+        if (rhs == false_literal() || rhs == true_literal()) std::swap(rhs, carry_in);
         const int partial = make_xor(lhs, rhs);
+        if (carry_in == false_literal()) return {partial, make_and(lhs, rhs)};
+        if (carry_in == true_literal()) return {-partial, make_or(lhs, rhs)};
         const int sum = make_xor(partial, carry_in);
         const int carry_out = formula_.new_variable();
-        formula_.add_clause({-lhs, -rhs, carry_out});
-        formula_.add_clause({-lhs, -carry_in, carry_out});
-        formula_.add_clause({-rhs, -carry_in, carry_out});
-        formula_.add_clause({lhs, rhs, -carry_out});
-        formula_.add_clause({lhs, carry_in, -carry_out});
-        formula_.add_clause({rhs, carry_in, -carry_out});
+        formula_.define(carry_out, {-lhs, -rhs, carry_out});
+        formula_.define(carry_out, {-lhs, -carry_in, carry_out});
+        formula_.define(carry_out, {-rhs, -carry_in, carry_out});
+        formula_.define(carry_out, {lhs, rhs, -carry_out});
+        formula_.define(carry_out, {lhs, carry_in, -carry_out});
+        formula_.define(carry_out, {rhs, carry_in, -carry_out});
         return {sum, carry_out};
     }
 
@@ -111,8 +212,14 @@ class BooleanCnfBuilder {
     }
 
   private:
+    static std::uint64_t gate_key(int lhs, int rhs) {
+        if (lhs > rhs) std::swap(lhs, rhs);
+        return (static_cast<std::uint64_t>(static_cast<std::uint32_t>(lhs)) << 32) |
+               static_cast<std::uint32_t>(rhs);
+    }
     CnfFormula& formula_;
     int false_literal_ = 0;
+    std::unordered_map<std::uint64_t, int> ands_, xors_;
 };
 
 bool weight_bit(const Weight& value, std::size_t bit) {
@@ -242,8 +349,18 @@ int add_interval_violation(CnfFormula& formula, BooleanCnfBuilder& builder,
                            const WeightedInterval& interval) {
     if (!interval.is_valid())
         throw std::invalid_argument("SAT error interval is invalid");
+    // Exact integer identity: equal output terms cancel from sum_i 2^i(C_i-R_i).
+    // Keep their positions: packing surviving bits would change their weights.
+    auto reduced_candidate = candidate_outputs;
+    auto reduced_reference = reference_outputs;
+    for (std::size_t bit = 0; bit < reference_outputs.size(); ++bit) {
+        if (candidate_outputs[bit] == reference_outputs[bit]) {
+            reduced_candidate[bit] = builder.false_literal();
+            reduced_reference[bit] = builder.false_literal();
+        }
+    }
     const std::vector<int> difference =
-        builder.make_signed_difference(candidate_outputs, reference_outputs);
+        builder.make_signed_difference(reduced_candidate, reduced_reference);
     const SignedWeight cap = signed_error_cap(reference_outputs.size());
     if (interval.l < -cap || interval.u > cap)
         throw std::invalid_argument(
@@ -282,6 +399,12 @@ class AbcSatSolver {
     AbcSatSolver(const AbcSatSolver&) = delete;
     AbcSatSolver& operator=(const AbcSatSolver&) = delete;
 
+    void profile_stats(SatProfile& profile) const {
+        profile.conflicts = solver_->stats.conflicts;
+        profile.decisions = solver_->stats.decisions;
+        profile.propagations = solver_->stats.propagations;
+    }
+
     SolveStatus solve(double timeout_seconds) {
         if (inconsistent_) return SolveStatus::Unsat;
         if (!(timeout_seconds > 0.0) || !std::isfinite(timeout_seconds))
@@ -313,7 +436,9 @@ class AbcSatSolver {
 
 SatDecision check_gate_const_error_interval_sat(
     const AigNetlist& current, int gate_id, bool force_one,
-    const WeightedInterval& interval, double timeout_seconds) {
+    const WeightedInterval& interval, double timeout_seconds, SatProfile* profile) {
+    using Clock = std::chrono::steady_clock;
+    const auto started = profile ? Clock::now() : Clock::time_point{};
     validate_live_aig(current);
     if (current.outputs.empty() || current.outputs.size() > Weight::nwords() * 64)
         throw std::invalid_argument("SAT requires between 1 and 256 outputs");
@@ -335,8 +460,27 @@ SatDecision check_gate_const_error_interval_sat(
     }
     add_interval_violation(
         formula, builder, reference.outputs, candidate_outputs, interval);
+    if (profile) {
+        profile->variables_before_compaction = formula.variables;
+        profile->clauses_before_compaction = formula.clauses.size();
+        profile->outputs = reference.outputs.size();
+        profile->changed_outputs = 0;
+        for (std::size_t bit = 0; bit < reference.outputs.size(); ++bit)
+            profile->changed_outputs += reference.outputs[bit] != candidate_outputs[bit];
+    }
+    formula.compact();
+    const auto encoded = profile ? Clock::now() : Clock::time_point{};
     AbcSatSolver solver(formula);
+    const auto loaded = profile ? Clock::now() : Clock::time_point{};
     const SolveStatus status = solver.solve(timeout_seconds);
+    if (profile) {
+        profile->encode_seconds = std::chrono::duration<double>(encoded - started).count();
+        profile->load_seconds = std::chrono::duration<double>(loaded - encoded).count();
+        profile->solve_seconds = std::chrono::duration<double>(Clock::now() - loaded).count();
+        profile->variables = formula.variables;
+        profile->clauses = formula.clauses.size();
+        solver.profile_stats(*profile);
+    }
 
     if (status == SolveStatus::Unsat) return SatDecision::Safe;
     if (status == SolveStatus::Sat) return SatDecision::Unsafe;

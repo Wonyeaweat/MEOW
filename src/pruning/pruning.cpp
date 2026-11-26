@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
 #include <stdexcept>
 #include <tuple>
 #include <vector>
@@ -188,6 +191,22 @@ std::vector<Candidate> plan_candidates(const AigNetlist& net,
 
 PruningResult run_pruning(AigNetlist net, const PruningConfig& config) {
     const auto started = Clock::now();
+    // Opt-in CSV trace, one row per completed phase/query. Flush for live inspection.
+    std::ofstream trace;
+    if (const char* path = std::getenv("MEOW_PROFILE_CSV")) {
+        trace.open(path);
+        if (!trace) throw std::runtime_error("Cannot open MEOW_PROFILE_CSV");
+        trace << std::setprecision(17)
+              << "round,stage,seconds,gates,candidates,gate,force,lower,upper,decision,encode_s,load_s,solve_s,variables,clauses,conflicts,decisions,propagations,variables_before_compaction,clauses_before_compaction,outputs,changed_outputs\n";
+    }
+    int round = 0;
+    auto phase = [&](const char* name, Clock::time_point start, int gates, std::size_t candidates) {
+        if (trace.is_open()) {
+            trace << round << ',' << name << ',' << elapsed(start) << ',' << gates << ','
+                  << candidates << ",,,,,,,,,,,,,,,,,\n";
+            trace.flush();
+        }
+    };
     if (net.outputs.empty() || net.outputs.size() > Weight::nwords() * 64)
         throw std::invalid_argument("pruning requires between 1 and 256 outputs");
     if (!(config.timeout_seconds > 0) || !std::isfinite(config.timeout_seconds))
@@ -208,9 +227,14 @@ PruningResult run_pruning(AigNetlist net, const PruningConfig& config) {
     analysis_config.window_pi_limit = 16;
     analysis_config.useful_error_threshold = config.threshold;
     while (!expired()) {
+        ++round;
+        const auto analysis_started = Clock::now();
         const auto analysis = analyze(net, analysis_config);
+        phase("analysis", analysis_started, analysis.gates.size(), 0);
         if (expired()) break;
+        const auto plan_started = Clock::now();
         const auto candidates = plan_candidates(net, analysis, cumulative, config.threshold);
+        phase("planning", plan_started, analysis.gates.size(), candidates.size());
         if (expired() || candidates.empty()) break;
         const Candidate* selected = nullptr;
         bool unknown = false;
@@ -218,9 +242,25 @@ PruningResult run_pruning(AigNetlist net, const PruningConfig& config) {
             if (expired()) break;
             const double remaining = config.timeout_seconds - elapsed(started);
             if (!(remaining > 0)) { expired(); break; }
+            SatProfile profile;
+            const auto sat_started = Clock::now();
             const auto decision = check_gate_const_error_interval_sat(
                 net, candidate.replacement.target_gate,
-                candidate.replacement.replacement_literal == 1, candidate.local, remaining);
+                candidate.replacement.replacement_literal == 1, candidate.local, remaining,
+                trace.is_open() ? &profile : nullptr);
+            if (trace.is_open()) {
+                trace << round << ",sat," << elapsed(sat_started) << ',' << analysis.gates.size()
+                      << ',' << candidates.size() << ',' << candidate.replacement.target_gate
+                      << ',' << candidate.replacement.replacement_literal << ',' << candidate.local.l
+                      << ',' << candidate.local.u << ','
+                      << (decision == SatDecision::Safe ? "safe" : decision == SatDecision::Unsafe ? "unsafe" : "unknown")
+                      << ',' << profile.encode_seconds << ',' << profile.load_seconds << ',' << profile.solve_seconds
+                      << ',' << profile.variables << ',' << profile.clauses << ',' << profile.conflicts
+                      << ',' << profile.decisions << ',' << profile.propagations
+                      << ',' << profile.variables_before_compaction << ',' << profile.clauses_before_compaction
+                      << ',' << profile.outputs << ',' << profile.changed_outputs << '\n';
+                trace.flush();
+            }
             if (decision == SatDecision::Unknown) {
                 result.search_complete = false;
                 unknown = true;
@@ -234,11 +274,13 @@ PruningResult run_pruning(AigNetlist net, const PruningConfig& config) {
             break;
         }
         if (expired()) break;
+        const auto commit_started = Clock::now();
         AigNetlist trial = net;
         apply_replacement(trial, selected->replacement, scratch);
         if (expired()) break;
         net = std::move(trial);
         cumulative = selected->projected;
+        phase("commit", commit_started, count_and_gates(net), candidates.size());
     }
     result.final_gates = count_and_gates(net);
     result.estimated_interval = cumulative;
